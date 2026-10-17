@@ -225,8 +225,23 @@ export const snapshotRoots = async (
     const relativePath = relative(root, path) || ".";
     if (stats.isSymbolicLink()) {
       // Keep the target as stored: lexical resolution can merge distinct targets.
-      const target = await readlink(path);
-      const afterRead = await lstat(path);
+      let target: string;
+      let afterRead: Stats;
+      try {
+        target = await readlink(path);
+        afterRead = await lstat(path);
+      } catch (cause: unknown) {
+        if (
+          cause instanceof Error &&
+          "code" in cause &&
+          cause.code === "ENOENT"
+        ) {
+          truncated = true;
+          enumerationReasons.add("identity_changed");
+          return false;
+        }
+        throw cause;
+      }
       if (!hasSameIdentity(stats, afterRead, "symlink")) {
         truncated = true;
         enumerationReasons.add("identity_changed");
