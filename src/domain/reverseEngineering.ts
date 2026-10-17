@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+import { localPathStringSchema } from "./localPath.js";
+
 const objdumpArtifactInputSchema = z
   .object({
-    path: z.string().min(1),
+    path: localPathStringSchema,
     operation: z.enum([
       "file_headers",
       "section_headers",
@@ -25,7 +27,7 @@ export const objdumpInputSchema = z.discriminatedUnion("operation", [
 /** Caller-selected Rizin command against one local artifact. */
 export const rizinInputSchema = z
   .object({
-    path: z.string().min(1),
+    path: localPathStringSchema,
     command: z
       .string()
       .min(1)
