@@ -59,6 +59,11 @@ it.each(shutdownEvents)(
       },
     };
     const lifecycle = createShutdown({
+      session,
+      dependencies,
+      serverLogger: pino({ enabled: false }),
+    });
+    lifecycle.attachTransport({
       handle,
       closeAndroid: async () => {
         androidCloseCalls += 1;
@@ -66,9 +71,6 @@ it.each(shutdownEvents)(
       closeOptionalProviders: async () => {
         optionalCloseCalls += 1;
       },
-      session,
-      dependencies,
-      serverLogger: pino({ enabled: false }),
     });
 
     if (event === "SIGINT" || event === "SIGTERM") signals.emit(event);
@@ -144,13 +146,14 @@ it("joins concurrent shutdown events and retries only failed owners", async () =
     },
   };
   createShutdown({
+    session,
+    dependencies,
+    serverLogger: pino({ enabled: false }),
+  }).attachTransport({
     handle,
     closeAndroid: async () => {
       androidCloseCalls += 1;
     },
-    session,
-    dependencies,
-    serverLogger: pino({ enabled: false }),
   });
 
   signals.emit("SIGINT");

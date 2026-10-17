@@ -123,6 +123,8 @@ describe("MCP runtime errors", () => {
 
   it("reports transport startup failure without its cause", async () => {
     const output: string[] = [];
+    const shutdown: Array<() => void> = [];
+    const shutdownUnregistrations: string[] = [];
     expect(
       await run(
         dependencies({
@@ -130,14 +132,17 @@ describe("MCP runtime errors", () => {
             throw new Error("SECRET startup stack");
           },
           output,
-          shutdown: [],
+          shutdown,
           exitCodes: [],
+          shutdownUnregistrations,
         }),
       ),
     ).toBe(1);
     expect(output).toEqual([
       "REA could not start its MCP connection. Restart REA from your MCP client; run `rea doctor` if it fails again.\n",
     ]);
+    expect(shutdown).toHaveLength(1);
+    expect(shutdownUnregistrations).toEqual(["shutdown"]);
   });
 
   it("reports shutdown failure and sets a failing exit code", async () => {
