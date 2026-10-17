@@ -58,6 +58,34 @@ describe("screenshot committed document identity", () => {
       error: { reason: "protocol_error" },
     });
   });
+  it.each([
+    { name: "missing data", response: {} },
+    { name: "non-string data", response: { data: 42 } },
+    { name: "invalid base64", response: { data: "not base64!!" } },
+    { name: "non-canonical base64", response: { data: "YQ" } },
+  ])(
+    "classifies a screenshot response with $name as a protocol error",
+    async ({ response }) => {
+      const browser = await startFakeCdpBrowser({
+        commandResult: ({ method }) =>
+          method === "Page.captureScreenshot" ? response : undefined,
+      });
+      onTestFinished(async () => {
+        await browser.close();
+      });
+      const result = await new CdpBrowserProvider().captureScreenshot(
+        captureWebScreenshotInputSchema.parse({
+          cdp_endpoint: browser.endpoint,
+          allowed_origins: [browser.allowedOrigin],
+          target_id: "allowed-page",
+        }),
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: { reason: "protocol_error" },
+      });
+    },
+  );
   it.each(["loader-main", "loader-reloaded"])(
     "distinguishes %s for the same URL",
     async (screenshotDocumentLoader) => {
