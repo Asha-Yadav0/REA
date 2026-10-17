@@ -22,6 +22,7 @@ import type { Logger } from "pino";
 import type { ProviderAvailability } from "../application/AnalysisProvider.js";
 import { mcpProgressReporter } from "./mcpProgress.js";
 import { registerArtifactComparisonTool } from "./registerArtifactComparisonTool.js";
+import { registerArtifactFamilyClusteringTool } from "./registerArtifactFamilyClusteringTool.js";
 import { registerBundleComparisonTool } from "./registerBundleComparisonTool.js";
 import { registerCloseLifecycleTool } from "./registerCloseLifecycleTool.js";
 import { registerFunctionComparisonTool } from "./registerFunctionComparisonTool.js";
@@ -283,6 +284,7 @@ export const registerSessionTools = (
   const captureContract = toolContract("capture_process_scenario");
   const compareContract = toolContract("compare_process_captures");
   const compareArtifactsContract = toolContract("compare_artifacts");
+  const clusterArtifactsContract = toolContract("cluster_artifacts");
   const compareFunctionsContract = toolContract("compare_functions");
   const compareBundlesContract = toolContract("compare_bundles");
   const snapshotContract = toolContract("get_evidence_bundle");
@@ -372,6 +374,11 @@ export const registerSessionTools = (
   };
   registerProcessComparisonTool(server, session, compareContract);
   registerArtifactComparisonTool(server, session, compareArtifactsContract);
+  registerArtifactFamilyClusteringTool(
+    server,
+    session,
+    clusterArtifactsContract,
+  );
   registerFunctionComparisonTool(server, session, compareFunctionsContract);
   registerBundleComparisonTool(
     server,

@@ -74,6 +74,14 @@ export const TOOL_EXAMPLE_OVERRIDES: Readonly<
     left: ARTIFACT_COMPARISON_EXAMPLE.left,
     right: ARTIFACT_COMPARISON_EXAMPLE.right,
   },
+  cluster_artifacts: {
+    members: [
+      { label: "left", evidence: ARTIFACT_COMPARISON_EXAMPLE.left },
+      // The same artifact inspected twice: a family, without inventing bytes.
+      { label: "left-repeat", evidence: ARTIFACT_COMPARISON_EXAMPLE.left },
+      { label: "right", evidence: ARTIFACT_COMPARISON_EXAMPLE.right },
+    ],
+  },
   compare_functions: {
     left: FUNCTION_COMPARISON_EXAMPLE.left,
     right: FUNCTION_COMPARISON_EXAMPLE.right,

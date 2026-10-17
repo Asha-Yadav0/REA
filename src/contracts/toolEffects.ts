@@ -701,6 +701,7 @@ export const TOOL_EFFECTS: Readonly<Record<string, ToolEffects>> = {
   }),
   compare_process_captures: sessionEvidence,
   compare_artifacts: sessionEvidence,
+  cluster_artifacts: sessionEvidence,
   compare_wasm_interfaces: sessionEvidence,
   compare_functions: sessionEvidence,
   compare_bundles: effects({ mutatesSession: true }),
