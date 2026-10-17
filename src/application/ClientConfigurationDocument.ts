@@ -29,6 +29,18 @@ import { PRODUCT_IDENTITY } from "../identity.js";
 import type { SetupClient } from "./SupportedClients.js";
 import { compareUnicodeCodePoints } from "../domain/unicodeCodePointOrder.js";
 
+/**
+ * Safely pushes elements from a source array into a target array in chunks.
+ * This prevents "RangeError: Maximum call stack size exceeded" when the 
+ * source array is extremely large (e.g., >100,000 items).
+ */
+function pushLargeArray<T>(target: T[], source: readonly T[]): void {
+    const CHUNK_SIZE = 10000;
+    for (let i = 0; i < source.length; i += CHUNK_SIZE) {
+        target.push(...source.slice(i, i + CHUNK_SIZE));
+    }
+}
+
 export type ClientConfigurationFormat = NonNullable<SetupClient["format"]>;
 export type ClientServersKey = "mcp_servers" | "mcpServers" | "mcp" | "servers";
 
