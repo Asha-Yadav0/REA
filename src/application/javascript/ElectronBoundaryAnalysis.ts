@@ -180,6 +180,10 @@ export const summarizeElectronBoundaries = (
         moduleKind: finding.module_kind,
       }),
     ).length,
+    protocol_registrations: javascript.reduce(
+      (count, { electron }) => count + electron.protocols.length,
+      0,
+    ),
   };
 };
 
