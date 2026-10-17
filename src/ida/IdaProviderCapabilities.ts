@@ -75,12 +75,11 @@ export const idaCapabilities = (
     (operation) => ({
       provider: IDA_PROVIDER_IDENTITY,
       operation,
-      ...((mode === "headless" || native) && operation === "procedure_callers"
+      ...(native && operation === "procedure_callers"
         ? ({
             available: false,
-            reason: native
-              ? "The native upstream profile reports code references without proving direct call edges."
-              : "The modern upstream profile reports code references without proving direct call edges.",
+            reason:
+              "The native upstream profile reports code references without proving direct call edges.",
           } as const)
         : ({ available: true, reason: null } as const)),
       cachePolicy: "live",

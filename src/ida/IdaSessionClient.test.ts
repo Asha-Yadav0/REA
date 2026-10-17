@@ -969,9 +969,8 @@ describe("headless IDA session ownership and cleanup", () => {
     expect(producer.inputPath).not.toBe(target.path);
     expect(await readFile(producer.inputPath)).toEqual(original);
     expect(
-      functionDossierSchema
-        .parse(result.value.result)
-        .limitations.some((value) => value.includes("Direct callers")),
+      functionDossierSchema.parse(result.value.result).facet_availability
+        ?.callers?.available,
     ).toBe(true);
     const open = producer.calls.find(({ name }) => name === "idb_open");
     expect(open?.args).toMatchObject({

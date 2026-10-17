@@ -199,6 +199,13 @@ const fixture = async (empty: readonly string[], omitMore: boolean) => {
 };
 
 it.each([
+  {
+    empty: [],
+    omitMore: false,
+    oracles: true,
+    passed: false,
+    expectedCaller: "0x1000",
+  },
   { empty: [], omitMore: false, oracles: true, passed: true },
   { empty: ["list_funcs"], omitMore: false, oracles: true, passed: false },
   { empty: ["find_regex"], omitMore: false, oracles: true, passed: false },
@@ -212,7 +219,10 @@ it.each([
   },
 ])(
   "checks real-verifier values for $empty / omitted more=$omitMore / oracles=$oracles",
-  async ({ empty, omitMore, oracles, passed }) => {
+  async (scenario) => {
+    const { empty, omitMore, oracles, passed } = scenario;
+    const expectedCaller =
+      "expectedCaller" in scenario ? scenario.expectedCaller : undefined;
     const upstream = await fixture(empty, omitMore);
     let cleanupConfirmed = false;
     try {
@@ -232,6 +242,9 @@ it.each([
             "55",
             "--report",
             reportPath,
+            ...(expectedCaller === undefined
+              ? []
+              : ["--expected-caller", expectedCaller]),
             ...(oracles
               ? ["--expected-string", "a.b", "--expected-xref", "0x1004"]
               : []),
@@ -247,12 +260,24 @@ it.each([
       );
       cleanupConfirmed = true;
       const report = z
-        .object({ passed: z.boolean(), unverified: z.array(z.string()) })
+        .object({
+          passed: z.boolean(),
+          unverified: z.array(z.string()),
+          failure: z
+            .object({ phase: z.string(), message: z.string() })
+            .optional(),
+        })
         .parse(JSON.parse(await readFile(reportPath, "utf8")));
       expect(report.passed, result.stdout.text + result.stderr.text).toBe(
         passed,
       );
       expect(result.exitCode).toBe(passed ? 0 : 1);
+      if (expectedCaller !== undefined) {
+        expect(report.failure?.phase).toBe("production CLI function analysis");
+        expect(report.failure?.message).toContain(
+          "independently expected caller",
+        );
+      }
       if (!oracles)
         expect(report.unverified).toEqual([
           "String inventory/search correctness: no independent expected literal supplied.",

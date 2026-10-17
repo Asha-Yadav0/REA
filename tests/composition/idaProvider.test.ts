@@ -131,7 +131,7 @@ describe("IDA provider composition", () => {
       provider
         .capabilities()
         .find(({ operation }) => operation === "procedure_callers")?.available,
-    ).toBe(false);
+    ).toBe(true);
   });
   it(
     "re-observes externally mutable state even when a document is explicit and a snapshot is imported",
