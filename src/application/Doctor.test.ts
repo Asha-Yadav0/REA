@@ -3,9 +3,94 @@ import { describe, expect, it } from "vitest";
 import { SUPPORTED_NODE_VERSION_PROSE } from "../domain/runtimeVersion.js";
 import type { ClientRegistrationStatus } from "./ClientRegistrationStatus.js";
 import { createDoctorHostFixture as host } from "./Doctor.fixture.js";
-import { runDoctor } from "./Doctor.js";
+import { runDoctor, systemDoctorHost } from "./Doctor.js";
 import { err } from "../domain/result.js";
 import { HopperReleaseError } from "./HopperReleaseFeed.js";
+
+describe("doctor Hopper startup timeout", () => {
+  it("keeps a configured invalid Hopper timeout unhealthy in an audit with an available peer", async () => {
+    const selectedHost = {
+      ...systemDoctorHost({
+        environment: { REA_HOPPER_STARTUP_TIMEOUT_MS: "0" },
+      }),
+      ...host({
+        providerInspections: () =>
+          Promise.resolve([
+            {
+              id: "ghidra",
+              configured: true,
+              available: true,
+              providerVersion: null,
+              registrationEnvironment: {},
+              checks: [],
+            },
+          ]),
+      }),
+    };
+    const result = await runDoctor(undefined, selectedHost);
+    expect(result.healthy).toBe(false);
+    expect(result.environment_healthy).toBe(false);
+  });
+
+  it.each(["", "0", "-1", "1.5", "1e3", "invalid", "2147483648"])(
+    "rejects invalid Hopper startup timeout %j in the selected provider scope",
+    async (value) => {
+      const selectedHost = {
+        ...systemDoctorHost({
+          environment: { REA_HOPPER_STARTUP_TIMEOUT_MS: value },
+        }),
+        ...host(),
+      };
+      const result = await runDoctor(undefined, selectedHost, {
+        providers: ["hopper"],
+      });
+
+      expect(result.healthy).toBe(false);
+      expect(result.scope_checks).toContainEqual(
+        expect.objectContaining({
+          name: "hopper-startup-timeout",
+          ok: false,
+          classification: "config_drift",
+          detail: expect.stringContaining("REA_HOPPER_STARTUP_TIMEOUT_MS"),
+          remediation: expect.stringContaining("REA_HOPPER_STARTUP_TIMEOUT_MS"),
+        }),
+      );
+    },
+  );
+
+  it.each([undefined, "1", "120000", "2147483647"])(
+    "keeps Hopper ready with the valid startup timeout %j",
+    async (value) => {
+      const selectedHost = {
+        ...systemDoctorHost({
+          environment: { REA_HOPPER_STARTUP_TIMEOUT_MS: value },
+        }),
+        ...host(),
+      };
+      expect(
+        (await runDoctor(undefined, selectedHost, { providers: ["hopper"] }))
+          .healthy,
+      ).toBe(true);
+    },
+  );
+
+  it("keeps an invalid Hopper timeout informational outside the Hopper scope", async () => {
+    const selectedHost = {
+      ...systemDoctorHost({
+        environment: { REA_HOPPER_STARTUP_TIMEOUT_MS: "0" },
+      }),
+      ...host(),
+    };
+    const result = await runDoctor(undefined, selectedHost, { providers: [] });
+    expect(result.healthy).toBe(true);
+    expect(result.informational_checks).toContainEqual(
+      expect.objectContaining({
+        name: "hopper-startup-timeout",
+        ok: false,
+      }),
+    );
+  });
+});
 
 describe("doctor runtime check", () => {
   it("reports Node 25 as unsupported", async () => {
