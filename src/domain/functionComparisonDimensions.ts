@@ -1,5 +1,23 @@
 import { canonicalJson } from "./comparisonSemantics.js";
+import {
+  compareKindRows,
+  matchEndpointLists,
+  normalizedEndpoint,
+} from "./functionComparisonReferenceMatching.js";
 import { diffLines } from "diff";
+
+/** A caller-visible kind row: edge semantics with each endpoint's identity. */
+const normalizedKindRow = (row: unknown): unknown => {
+  const { source, target, ...rest } = row as {
+    source: Parameters<typeof normalizedEndpoint>[0];
+    target: Parameters<typeof normalizedEndpoint>[0];
+  };
+  return {
+    ...rest,
+    source: normalizedEndpoint(source),
+    target: normalizedEndpoint(target),
+  };
+};
 
 import type { FunctionSnapshot } from "./functionDossierEvidence.js";
 import {
@@ -277,10 +295,8 @@ const compareReferences = (
       rightProjection,
       context,
     );
-  if (
-    canonicalJson(leftProjection, "Function comparison") !==
-    canonicalJson(rightProjection, "Function comparison")
-  )
+  const endpoints = matchEndpointLists(leftProjection, rightProjection);
+  if (endpoints === "changed")
     return dimensionResult({
       dimension: "references",
       status: "changed",
@@ -296,15 +312,15 @@ const compareReferences = (
     });
   const leftKinds = referenceKindProjection(left, sameArtifact);
   const rightKinds = referenceKindProjection(right, sameArtifact);
-  const kindsKnown = leftKinds !== null && rightKinds !== null;
-  // Differing known edge kinds are a change whatever the endpoint identity.
-  if (
-    kindsKnown &&
-    canonicalJson(leftKinds, "Function comparison") !==
-      canonicalJson(rightKinds, "Function comparison")
-  )
-    return compareValues("references", leftKinds, rightKinds, context);
-  // Equal projections with unknown endpoints do not establish equal targets.
+  let kindsAsymmetric = false;
+  if (leftKinds !== null && rightKinds !== null) {
+    const kinds = compareKindRows(leftKinds, rightKinds);
+    if (kinds === "changed")
+      return compareValues("references", leftKinds, rightKinds, context);
+    kindsAsymmetric = kinds === "asymmetric";
+  }
+  // Across artifacts an unnamed endpoint has no stable identity at all, so the
+  // endpoint comparison cannot decide the dimension.
   if (!sameArtifact && (hasUnnamedEndpoint(left) || hasUnnamedEndpoint(right)))
     return unresolvedDimension({
       dimension: "references",
@@ -315,8 +331,29 @@ const compareReferences = (
         "Unnamed reference endpoints have no stable identity across different artifacts, so equal named endpoints do not establish equal references.",
       ],
     });
-  if (kindsKnown)
-    return compareValues("references", leftKinds, rightKinds, context);
+  // One record resolving an endpoint the other leaves unresolved establishes
+  // neither a difference nor equality.
+  if (endpoints === "asymmetric" || kindsAsymmetric)
+    return unresolvedDimension({
+      dimension: "references",
+      links: context.links,
+      leftCount: leftProjection.length,
+      rightCount: rightProjection.length,
+      limitations: [
+        "One record resolves a reference endpoint while the other leaves it unresolved, so no known endpoint differs and equal named endpoints do not establish equal references.",
+      ],
+    });
+  // The rows already agreed through compareKindRows, so the caller-visible
+  // values keep the edge semantics with each endpoint's comparison identity —
+  // resolved endpoints stay attributable and supplementary names are dropped,
+  // so the digests cannot collide across unrelated reference sets.
+  if (leftKinds !== null && rightKinds !== null)
+    return compareValues(
+      "references",
+      leftKinds.map(normalizedKindRow),
+      rightKinds.map(normalizedKindRow),
+      context,
+    );
   return unresolvedDimension({
     dimension: "references",
     links: context.links,

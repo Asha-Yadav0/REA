@@ -79,12 +79,25 @@ type ReferenceEdge = FunctionSnapshot["dossier"]["outgoing_references"][number];
  * only by its address, which names one location only within one artifact;
  * across artifacts it stays unknown (null).
  */
+/**
+ * A named endpoint survives relocation. Within one artifact the address
+ * identifies the target and a resolved name is supplementary, so both are kept;
+ * across artifacts an address names nothing, so only a resolved name survives
+ * and an unresolved endpoint stays unknown (null).
+ */
 const referenceEndpoint = (
   procedure: ReferenceEdge["source_procedure"],
   address: string,
   sameArtifact: boolean,
-): string | { readonly address: string } | null =>
-  procedure !== null ? procedure.name : sameArtifact ? { address } : null;
+):
+  | { readonly address: string; readonly name: string | null }
+  | { readonly name: string }
+  | null =>
+  sameArtifact
+    ? { address, name: procedure?.name ?? null }
+    : procedure === null
+      ? null
+      : { name: procedure.name };
 
 export const referenceProjection = (
   snapshot: FunctionSnapshot,
@@ -130,6 +143,10 @@ export const referenceKindProjection = (
     })),
   ];
   if (edges.some(({ edge }) => !edge.kind.available)) return null;
+  // Each kind stays attached to its edge identity: two edges that swap kinds
+  // between the same endpoints must still compare as changed. The comparison
+  // matches rows by endpoint identity, so an unresolved endpoint never turns
+  // its own asymmetry into kind evidence.
   return sorted(
     edges.map(({ direction, edge }) => {
       if (!edge.kind.available)
@@ -148,20 +165,22 @@ export const referenceKindProjection = (
           edge.target_address,
           sameArtifact,
         ),
-        type: edge.kind.type,
-        flow: edge.kind.flow,
-        call: edge.kind.call,
-        jump: edge.kind.jump,
-        data: edge.kind.data,
-        read: edge.kind.read,
-        write: edge.kind.write,
-        indirect: edge.kind.indirect,
-        computed: edge.kind.computed,
-        conditional: edge.kind.conditional,
-        terminal: edge.kind.terminal,
-        primary: edge.kind.primary,
-        operand_index: edge.kind.operand_index,
-        external: edge.kind.external,
+        kind: {
+          type: edge.kind.type,
+          flow: edge.kind.flow,
+          call: edge.kind.call,
+          jump: edge.kind.jump,
+          data: edge.kind.data,
+          read: edge.kind.read,
+          write: edge.kind.write,
+          indirect: edge.kind.indirect,
+          computed: edge.kind.computed,
+          conditional: edge.kind.conditional,
+          terminal: edge.kind.terminal,
+          primary: edge.kind.primary,
+          operand_index: edge.kind.operand_index,
+          external: edge.kind.external,
+        },
       };
     }),
   );
@@ -287,7 +306,8 @@ const swiftLiteralSites = (snapshot: FunctionSnapshot) => {
   return { values, complete };
 };
 
-export const sorted = (values: readonly unknown[]): readonly unknown[] =>
+/** Canonically order values by their JSON, preserving their inferred type. */
+export const sorted = <T>(values: readonly T[]): readonly T[] =>
   values
     .map((value) => ({
       value,
