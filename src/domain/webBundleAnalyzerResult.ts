@@ -1,4 +1,5 @@
 import type { WebPageInspection } from "./browserObservationSchemas.js";
+import { browserOriginSchema } from "./browserObservation.js";
 import {
   webBundleAnalysisSchema,
   type WebBundleAnalysis,
@@ -65,12 +66,16 @@ export const buildWebBundleAnalysis = (
 const buildCaptureObservation = (
   inspection: WebPageInspection,
   sourceScripts: IncludedScript[],
-) => ({
-  target_url: inspection.target.url,
-  scripts_observed: inspection.scripts.total,
-  scripts_analyzed: sourceScripts.length,
-  source_artifacts: sourceScripts.map(sourceArtifact),
-});
+) => {
+  const targetOrigin = browserOriginSchema.safeParse(inspection.target.origin);
+  return {
+    target_url: inspection.target.url,
+    target_origin: targetOrigin.success ? targetOrigin.data : null,
+    scripts_observed: inspection.scripts.total,
+    scripts_analyzed: sourceScripts.length,
+    source_artifacts: sourceScripts.map(sourceArtifact),
+  };
+};
 
 const sourceArtifact = (script: IncludedScript) => {
   if (!script.source.included) throw new TypeError("Filtered source changed");
