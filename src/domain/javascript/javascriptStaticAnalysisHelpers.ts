@@ -214,6 +214,13 @@ const staticConcatenation = (node: t.BinaryExpression): string | undefined => {
   return text.startsWith("/") ? posix.join(".", text) : undefined;
 };
 
+const POSIX_PATH_RESOLVE_NAMES = new Set([
+  "path.resolve",
+  "path.posix.resolve",
+]);
+
+const POSIX_PATH_JOIN_NAMES = new Set(["path.join", "path.posix.join"]);
+
 const staticCallPath = (
   node: t.CallExpression | t.NewExpression,
 ): string | undefined => {
@@ -225,11 +232,8 @@ const staticCallPath = (
   if (name === "fileURLToPath" || name.endsWith(".fileURLToPath")) {
     return staticFileUrlPath(node);
   }
-  if (name.endsWith(".resolve"))
-    return name === "win32.resolve" || name.endsWith(".win32.resolve")
-      ? undefined
-      : staticResolvedPath(node);
-  if (!name.endsWith(".join") && name !== "join") return undefined;
+  if (POSIX_PATH_RESOLVE_NAMES.has(name)) return staticResolvedPath(node);
+  if (!POSIX_PATH_JOIN_NAMES.has(name)) return undefined;
   const parts: string[] = [];
   for (const argument of node.arguments) {
     if (isDirectoryIdentity(argumentNode(argument))) {

@@ -71,6 +71,10 @@ const unknownExpressions = [
   'path.win32.resolve(__dirname, "preload.js")',
   'win32.resolve("/app", "preload.js")',
   'resolve("/app", "preload.js")',
+  'settings.resolve("a", "/b")',
+  'Promise.resolve("/a")',
+  '["a","b"].join("/")',
+  'join("sub", "preload.js")',
   '__dirname + "preload.js"',
   'path.dirname(__filename) + "preload.js"',
 ];
@@ -234,7 +238,7 @@ describe("inert JavaScript path resolution", () => {
       "preload.js",
       "filesystem-expression",
     ],
-    ['join("sub", "preload.js")', "sub/preload.js", "module-specifier"],
+    ['path.join("sub", "preload.js")', "sub/preload.js", "module-specifier"],
     ["path.join(__dirname)", ".", "filesystem-expression"],
   ] as const)("preserves join behavior in %s", (expression, path, context) => {
     assertPathProjection(expression, path, context);
@@ -310,6 +314,30 @@ describe("inert JavaScript path resolution", () => {
   ])("preserves unresolved join syntax in %s", (expression) =>
     expect(staticPath(parsePathExpression(expression))).toBeUndefined(),
   );
+});
+
+it("does not treat unrelated join/resolve calls as filesystem paths", () => {
+  for (const expression of [
+    'settings.resolve("a", "/b")',
+    '["a","b"].join("/")',
+    'Promise.resolve("/a")',
+    'join("sub", "preload.js")',
+  ]) {
+    const { analysis } = analyzePathConsumers(expression);
+    expect(analysis.role_paths).toEqual([]);
+    expect(analysis.electron.browser_windows).toEqual([
+      expect.objectContaining({
+        preload_path: null,
+        preload_resolution_context: null,
+      }),
+    ]);
+    expect(analysis.electron.utility_processes).toEqual([
+      expect.objectContaining({
+        module_path: null,
+        module_resolution_context: null,
+      }),
+    ]);
+  }
 });
 
 it.each([
