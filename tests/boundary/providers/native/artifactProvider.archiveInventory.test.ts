@@ -2,7 +2,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { createPackage, createPackageWithOptions } from "@electron/asar";
-import { TextReader, Uint8ArrayWriter, ZipWriter } from "@zip.js/zip.js";
+import {
+  TextReader,
+  Uint8ArrayReader,
+  Uint8ArrayWriter,
+  ZipWriter,
+} from "@zip.js/zip.js";
 import { describe, expect, it } from "vitest";
 
 import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js";
@@ -143,6 +148,52 @@ describe("artifact archive inventory", () => {
     });
   });
 });
+
+describe("artifact member architecture", () => {
+  // A ZIP of x86-64 Linux plugin libraries reported null for every member.
+  it("records the architecture each member's executable header declares", async () => {
+    const root = await createTestTempDirectory("rea-member-architecture-");
+    const zipPath = join(root, "plugin.zip");
+    const zipWriter = new ZipWriter(new Uint8ArrayWriter());
+    await zipWriter.add(
+      "lib/libcore.so",
+      new Uint8ArrayReader(elfHeader(0x3e)),
+    );
+    await zipWriter.add(
+      "lib/aarch64/libcore.so",
+      new Uint8ArrayReader(elfHeader(0xb7)),
+    );
+    await zipWriter.add("lib/stub.so", new TextReader("not an ELF image"));
+    await writeFile(zipPath, await zipWriter.close());
+    const parsed = await parseBinaryTarget(zipPath);
+    if (!parsed.ok) throw new Error("Expected a ZIP target");
+    const result = await inventory(parsed.value);
+    const architectureAt = (logicalPath: string) => {
+      const occurrence = result.occurrences.find(
+        ({ logical_path }) => logical_path === logicalPath,
+      );
+      return result.nodes.find(
+        ({ artifact_id }) => artifact_id === occurrence?.artifact_id,
+      )?.architecture;
+    };
+    expect(architectureAt("lib/libcore.so")).toBe("x86_64");
+    expect(architectureAt("lib/aarch64/libcore.so")).toBe("arm64");
+    expect(architectureAt("lib/stub.so")).toBeNull();
+    expect(architectureAt(".")).toBeNull();
+  });
+});
+
+/** Minimal ELF64 little-endian header with the selected e_machine value. */
+const elfHeader = (machine: number): Uint8Array => {
+  const header = Buffer.alloc(64);
+  header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
+  header.writeUInt16LE(3, 16);
+  header.writeUInt16LE(machine, 18);
+  header.writeUInt32LE(1, 20);
+  header.writeUInt16LE(64, 52);
+  return new Uint8Array(header);
+};
+
 const inventory = async (targetValue: BinaryTarget) => {
   const result = await new ArtifactProvider(process.env)
     .createClient(targetValue)

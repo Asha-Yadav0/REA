@@ -17,7 +17,7 @@ import type { ArtifactNode } from "../../domain/artifactGraph.js";
 import { compareUnicodeCodePoints } from "../../domain/unicodeCodePointOrder.js";
 import {
   classifyArtifactContent,
-  classifyArtifactBytes,
+  classifiedArtifactBytes,
   createArtifactNode,
   createOccurrence,
   noteUnreadContainerSuffix,
@@ -322,7 +322,7 @@ const digestArtifactEntry = async (
     node: createArtifactNode({
       sha256: digest.sha256,
       size: digest.bytes,
-      format: classifyArtifactBytes(digest.prefix, digest.bytes),
+      ...classifiedArtifactBytes(digest.prefix, digest.bytes),
       contentState: "embedded",
     }),
     mismatched,

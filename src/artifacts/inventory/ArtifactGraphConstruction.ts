@@ -1,4 +1,5 @@
 import { compareUnicodeCodePoints } from "../../domain/unicodeCodePointOrder.js";
+import { parseExecutableHeader } from "../../domain/binaryTarget.js";
 import { isJavaScriptSourcePath } from "../../domain/javascript/javascriptArtifactFiles.js";
 import { digestCanonicalValue } from "../../domain/canonicalDigest.js";
 import {
@@ -199,10 +200,9 @@ export const createRootNode = (input: {
         "Artifact",
       ),
     size: input.digest?.bytes ?? 0,
-    format:
-      input.digest === null
-        ? "directory"
-        : classifyArtifactBytes(input.digest.prefix, input.digest.bytes),
+    ...(input.digest === null
+      ? { format: "directory" as const }
+      : classifiedArtifactBytes(input.digest.prefix, input.digest.bytes)),
     contentState: "materialized",
   });
 
@@ -210,6 +210,7 @@ export const createArtifactNode = (input: {
   readonly sha256: string;
   readonly size: number;
   readonly format: ArtifactNode["format"];
+  readonly architecture?: ArtifactNode["architecture"];
   readonly contentState: ArtifactNode["content_state"];
 }): ArtifactNode => ({
   artifact_id: artifactIdForContent(input.sha256),
@@ -217,7 +218,7 @@ export const createArtifactNode = (input: {
   sha256: input.sha256,
   size: input.size,
   media_type: null,
-  architecture: null,
+  architecture: input.architecture ?? null,
   content_state: input.contentState,
   limitations: [],
 });
@@ -534,6 +535,28 @@ const artifactRoleForFormat = (
 };
 
 /** Classify storage bytes independently of path names, roles, and permissions. */
+/**
+ * Classify content bytes with the single architecture their executable header
+ * declares. Universal Mach-O containers declare several and keep null.
+ */
+export const classifiedArtifactBytes = (
+  prefix: Buffer,
+  fileSize = prefix.length,
+): Pick<ArtifactNode, "format" | "architecture"> => {
+  const format = classifyArtifactBytes(prefix, fileSize);
+  if (!["elf", "mach-o", "pe", "dos-mz"].includes(format))
+    return { format, architecture: null };
+  // The host architecture only selects a universal Mach-O slice, excluded above.
+  const header = parseExecutableHeader(prefix, "x64", fileSize);
+  return {
+    format,
+    architecture:
+      header.ok && header.value.format === format
+        ? header.value.architecture
+        : null,
+  };
+};
+
 export const classifyArtifactBytes = (
   prefix: Buffer,
   fileSize = prefix.length,
