@@ -130,6 +130,10 @@ const ENHANCED_REQUIREMENTS: Readonly<
     "xrefs",
     "resolve_containing_procedure",
   ],
+  trace_call_path: [
+    "procedure_address",
+    ["procedure_callees", "procedure_callers"],
+  ],
 };
 
 /** Contract kinds whose operations run on the active session target. */
