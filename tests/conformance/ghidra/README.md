@@ -32,6 +32,12 @@ binaries and Ghidra projects are never committed.
   named limitations through the real read-only TCP bridge and provider Evidence
   projection; default Unix-socket transport, Windows, and the reported Amethyst
   artifact need separate verification. Fixture target code is never executed.
+- `shared-thunks.c` builds an ELF `-fPIC` shared library whose exported entry
+  calls an exported leaf through a PLT thunk named after the leaf.
+  `npm run verify:ghidra:thunk-calls` checks, through MCP and the CLI, that the
+  leaf's callers include the entry rather than the thunk and that the thunk's
+  callees include the leaf. It requires Linux, a C compiler and BYO Ghidra
+  12.1.4/JDK 21+. Fixture code is never executed.
 
 `scripts/verify-real-ghidra.mjs` uses `cc`, `clang`, and `lld-link` by default;
 `REA_CC`, `REA_CLANG`, and `REA_LLD_LINK` can select alternate commands. The

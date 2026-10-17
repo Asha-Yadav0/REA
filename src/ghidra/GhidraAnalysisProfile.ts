@@ -42,7 +42,7 @@ import {
   NATIVE_AOT_PROFILE_CONTRACT_REVISION,
 } from "../domain/native/nativeAotPe.js";
 
-const callRelationshipCoverage = "function-body-call-coverage-v5";
+const callRelationshipCoverage = "function-body-call-coverage-v6";
 const functionBoundaryObservations = "ghidra-function-boundary-limitations-v4";
 const instructionReferenceCoverage =
   "exact-address-incoming-without-synthetic-entry-v2";

@@ -1062,8 +1062,8 @@ public final class ReaGhidraBridge extends HeadlessScript {
         requireDocument(params);
         Function function = resolveProcedure(requireString(params, "procedure"));
         Set<Function> observed = callers
-            ? function.getCallingFunctions(monitor)
-            : function.getCalledFunctions(monitor);
+            ? callingFunctions(function)
+            : calledFunctions(function);
         List<Function> ordered = new ArrayList<>(observed);
         ordered.sort(Comparator.comparing(Function::getEntryPoint));
         JsonArray result = new JsonArray();
@@ -1083,6 +1083,34 @@ public final class ReaGhidraBridge extends HeadlessScript {
             function, currentProgram.getListing().getInstructions(function.getBody(), true), observed, false, null
         );
         return callRelationshipObservation(result, calls);
+    }
+
+    // Ghidra records a thunk's transfer to its target (for example an ELF PLT
+    // entry) as a jump, so getCallingFunctions omits callers that reach a
+    // function through its thunks. Those callers are callers of the function.
+    private Set<Function> callingFunctions(Function function) throws Exception {
+        Set<Function> result = new HashSet<>(function.getCallingFunctions(monitor));
+        Address[] thunks = function.getFunctionThunkAddresses(true);
+        if (thunks == null) return result;
+        Set<Function> thunkFunctions = new HashSet<>();
+        for (Address address : thunks) {
+            monitor.checkCancelled();
+            Function thunk = currentProgram.getFunctionManager().getFunctionAt(address);
+            if (thunk == null) continue;
+            thunkFunctions.add(thunk);
+            result.addAll(thunk.getCallingFunctions(monitor));
+        }
+        result.removeAll(thunkFunctions);
+        return result;
+    }
+
+    // A thunk's only outgoing transfer is to its target, which Ghidra models
+    // as a jump rather than a call; report the target so traversal continues.
+    private Set<Function> calledFunctions(Function function) throws Exception {
+        Set<Function> result = new HashSet<>(function.getCalledFunctions(monitor));
+        Function target = function.isThunk() ? function.getThunkedFunction(false) : null;
+        if (target != null) result.add(target);
+        return result;
     }
 
     private JsonObject procedureInfo(JsonObject params) throws Exception {
@@ -1560,9 +1588,9 @@ public final class ReaGhidraBridge extends HeadlessScript {
         JsonArray incoming = referenceEdges(incomingReferences);
         JsonArray outgoing = referenceEdges(outgoingReferences);
         JsonArray comments = comments(function);
-        Set<Function> callerFunctions = function.getCallingFunctions(monitor);
+        Set<Function> callerFunctions = callingFunctions(function);
         JsonArray callers = procedureIdentities(callerFunctions);
-        Set<Function> calleeFunctions = function.getCalledFunctions(monitor);
+        Set<Function> calleeFunctions = calledFunctions(function);
         JsonArray callees = procedureIdentities(calleeFunctions);
         JsonArray referencedStrings = referencedStrings(outgoingReferences);
         JsonArray referencedNames = referencedNames(outgoingReferences);
@@ -1618,6 +1646,9 @@ public final class ReaGhidraBridge extends HeadlessScript {
         );
         limitations.add(
             "Synthetic Ghidra entry-point references without actionable memory sources are omitted."
+        );
+        limitations.add(
+            "Callers include procedures that reach this function through a Ghidra thunk such as an ELF PLT entry; the thunk's own transfer appears in incoming references."
         );
         if (swift && aarch64) {
             limitations.add(
@@ -3426,6 +3457,9 @@ public final class ReaGhidraBridge extends HeadlessScript {
         JsonArray diagnostics = new JsonArray();
         diagnostics.add(
             "Only resolved Ghidra call references are returned; unresolved computed or indirect calls remain unknown, while function classifications distinguish thunks and externals."
+        );
+        diagnostics.add(
+            "Callers include procedures that reach the function through a Ghidra thunk such as an ELF PLT entry, without listing the thunk itself; a thunk's callees include the function it transfers to."
         );
         coverage.add("diagnostics", diagnostics);
         return coverage;
