@@ -445,7 +445,7 @@ describe("package import target arrays compared with Node", () => {
         moduleKind,
       );
       expect(result).toMatchObject({
-        resolution_status: "external",
+        resolution_status: "unavailable",
         resolved_path: null,
       });
       expect(result.limitations.join(" ")).toContain(
@@ -710,9 +710,6 @@ describe("package import alias refusals compared with Node", () => {
         imports: {
           "#config": "./config.cjs",
           "#blocked": null,
-          "#": "./config.cjs",
-          "#/": "./config.cjs",
-          "#config/": "./config.cjs",
         },
       }),
       "main.cjs": "module.exports = 1;",

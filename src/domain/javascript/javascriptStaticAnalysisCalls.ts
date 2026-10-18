@@ -52,6 +52,7 @@ import {
   semanticFactoryLoaderMemberAt,
   semanticFactoryRequireLoaderAt,
   semanticRequireLoaderAt,
+  semanticModuleRequireCallAt,
 } from "./javascriptSemanticRequireOrigin.js";
 
 type JavaScriptCallLike =
@@ -249,6 +250,12 @@ const requireCallSpecifier = (
   bindings: JavaScriptSemanticAnalysisState,
   context: FindingContext,
 ): { readonly specifier: string | undefined } | null => {
+  // Parsing a module.require call does not establish the delegate's identity.
+  // Retain the unchecked load so graph ownership cannot read it as absence.
+  if (semanticModuleRequireCallAt(node, bindings)) {
+    context.accumulator.unknownFindings += 1;
+    return { specifier: undefined };
+  }
   const bareRequire = t.isIdentifier(node.callee, { name: "require" });
   if (bareRequire) {
     const loader = semanticRequireLoaderAt(
