@@ -114,6 +114,10 @@ const DEFERRED_IMPORTS = [
     name: "reconstruction-obligation-ledger",
     path: "/dist/application/ReconstructionObligationLedgerService.js",
   },
+  {
+    name: "environment-server",
+    path: "/dist/server/environment/serveEnvironment.js",
+  },
 ] as const;
 // Report each resolved deferred package on stderr without changing resolution.
 const RESOLUTION_HOOK = `data:text/javascript,${encodeURIComponent(`

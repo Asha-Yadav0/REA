@@ -1157,6 +1157,16 @@ identifiable; unknown or shared script changes select everything. Android
 build-script edits retain the Linux suite and workflow validation; real Android
 verification stays manual. Renames account for both paths.
 
+The `agentenv` scope owns the environment application and server modules, the
+`environment-serve` and `environment-export` command registration, the shared
+streamable HTTP listener, `scripts/verify-agentenv-environment.mjs` and its
+workflow `real-agentenv.yml`. The lane exports a bundle from the source-owned
+Grafana-shaped capture through the built CLI, packs the checkout into the
+bundle's image and runs `agent-env run` on the hosted runner's Docker with the
+pinned `agentenv-framework` release; it passes when the smoke task passes and
+no container remains. It claims nothing about any hosted platform or another
+framework version.
+
 This narrower selection trades PR-time coverage for runner capacity. A change to
 unowned shared runtime code that fails only on arm64, macOS, Windows, the Apple
 artifact lane, or a provider lane that does not own the file is not caught on
@@ -1305,9 +1315,9 @@ Portable owner-based test selection remains observational. Its reports compare
 proposed omissions with the full run; incomplete or skipped observations do not
 establish that fewer tests would preserve regression detection.
 
-The eight automatic browser, binary-layout, EVM, JavaScript-recovery,
-recorded-crash, and web provider lanes download `rea-build-cache` from their own
-run after the build and static jobs succeed. Their existing build commands still
+The nine automatic browser, binary-layout, EVM, JavaScript-recovery,
+recorded-crash, web and environment-bundle provider lanes download
+`rea-build-cache` from their own run after the build and static jobs succeed. Their existing build commands still
 validate task hashes and rebuild mismatched inputs; provider observations always
 run. Provider-workflow-only edits also admit the build without enabling source
 test shards. Direct provider dispatches retain the cross-run restore-only cache.
@@ -1533,6 +1543,36 @@ version lookup) and REA ownership inspection separately from target execution.
 This is fixture evidence, not a sandbox claim. Inputs remain unchanged and the
 sentinel must stay alive; owned cleanup and empty verifier descendants are required. Pass an
 installed package entrypoint as the script's first argument for package coverage.
+
+### Exported environment bundles
+
+`npm run verify:agentenv:environment` is the `real-agentenv` lane. It requires
+the host's Docker CLI named by absolute `REA_DOCKER_COMMAND`, Python 3.12 with
+`agentenv-framework==0.9.1334` installed in a virtual environment whose
+`agent-env` binary is named by absolute `REA_AGENT_ENV_COMMAND`, and outbound
+network for `pip` on the runner and for `npm` inside the image build. Both
+variables are required; the verifier resolves nothing from `PATH` and installs
+nothing. Its disposable CI runner creates the virtual environment in runner
+storage, exports both paths and uses the runner's own Docker; no developer host
+configuration changes. The `agent-env run` itself is bounded to 15 minutes
+inside the 30-minute job, so a hung run ends with the verifier's failed receipt
+rather than the runner's kill.
+
+The verifier writes the Grafana-shaped HAR the view tests own, inspects it and
+projects the `environment-manifest` view with all three template rules through
+the built CLI, packs the checkout with `npm pack`, exports the bundle with
+`--package-tarball` so the image installs this checkout rather than the
+registry package, and runs `agent-env run` on the bundle. It checks that the
+export reports the planned file set with the inputs copied byte-exact, that
+the runner exits `0` with `tasks/smoke.json` reported as passed and the
+verifier's description naming the tool count, and that no container exists
+after the run that did not exist before. The one exception is the framework's
+own image-store helper, `agentenv-registry` (or `agentenv-registry-<port>`),
+a `registry:2` container the local provider starts on first use and keeps
+running across runs; a first run on a fresh host creates it, so the receipt
+lists it under `image_store_helpers` instead of counting it as a leak. Images
+built by the run remain and are counted in the receipt. Pass an installed
+package entrypoint as the script's first argument for package coverage.
 
 ## Agent evaluation and conformance records
 
