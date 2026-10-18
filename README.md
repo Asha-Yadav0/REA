@@ -345,6 +345,7 @@ For exact options, prerequisites and result contracts:
 - [Installation and setup](docs/installation.md): agent registration, provider configuration, updates and uninstall.
 - [Readiness and troubleshooting](docs/installation.md#check-readiness-for-your-task): diagnose one agent or analysis engine.
 - [CLI and Evidence](docs/cli.md): commands, provider selection, snapshots, import/export and exit statuses.
+- [Open-source decompilers and analyzers](docs/open-source-decompilers.md): compare tools by artifact format and understand their limits.
 - [MCP contracts](docs/mcp-contracts.md) and [agent prompts](docs/mcp-prompts.md): tool results, sessions and guided investigations.
 - [Tool catalog](docs/mcp-contracts.md#generated-catalog): generated inventory of tools, providers and CLI commands.
 - [Roadmap](docs/roadmap.md): planned work and capability trackers.
