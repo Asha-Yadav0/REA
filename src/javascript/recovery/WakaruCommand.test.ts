@@ -92,6 +92,38 @@ const commandFixture = (
   };
 };
 
+it("launches the command unwrapped when no limiter is configured", async () => {
+  const { context } = commandFixture((producer) => {
+    producer.stdout.write("wakaru 1.14.0\n");
+    setImmediate(() => {
+      producer.stdout.end();
+      producer.stderr.end();
+      producer.emit("close", 0, null);
+    });
+  });
+  const launches: { command: string; arguments: readonly string[] }[] = [];
+  const launch = context.launcher;
+  if (launch === undefined) throw new Error("Expected a fixture launcher");
+
+  await expect(
+    runWakaruCommand({
+      ...context,
+      limiter: undefined,
+      launcher: async (options) => {
+        launches.push({
+          command: options.command,
+          arguments: options.arguments,
+        });
+        return launch(options);
+      },
+    }),
+  ).resolves.toMatchObject({ exit_code: 0, resource_limiter: null });
+  // No prlimit wrapper: the configured binary is the direct argv[0].
+  expect(launches).toEqual([
+    { command: "/selected/wakaru", arguments: ["--version"] },
+  ]);
+});
+
 const createProducer = () =>
   Object.assign(new EventEmitter(), {
     stdout: new PassThrough(),

@@ -31,6 +31,7 @@ import {
 import {
   resolveWakaruCommand,
   type WakaruLauncher,
+  type WakaruWarning,
   WakaruCleanupFailure,
 } from "./WakaruCommand.js";
 import type { ProviderProcessSupervisor } from "../../process/ProviderProcess.js";
@@ -57,6 +58,8 @@ export class WakaruProvider implements JavaScriptRecoveryPort {
       Record<string, string | undefined>
     > = process.env,
     readonly launcher?: WakaruLauncher,
+    /** Destination for host-capability warnings; absent means silence. */
+    readonly warning?: WakaruWarning,
   ) {}
 
   /** Recover selected scripts using validated reports and verified output bytes. */
@@ -107,7 +110,9 @@ export class WakaruProvider implements JavaScriptRecoveryPort {
     const deadline = performance.now() + RECOVERY_LIMITS.timeoutMs;
     try {
       checkRecoveryCancellation(options?.signal);
-      const engine = await resolveWakaruCommand(this.environment);
+      const engine = await resolveWakaruCommand(this.environment, {
+        ...(this.warning === undefined ? {} : { warn: this.warning }),
+      });
       root = await mkdtemp(join(tmpdir(), "rea-wakaru-"));
       const inputs = join(root, "inputs");
       const staging = join(root, "modules");

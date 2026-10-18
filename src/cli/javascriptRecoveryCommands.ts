@@ -15,7 +15,16 @@ export const registerJavaScriptRecoveryCommands = (
   environment: Readonly<Record<string, string | undefined>>,
 ): void => {
   const service = new JavaScriptRecoveryService(
-    createJavaScriptRecoveryProvider(environment),
+    createJavaScriptRecoveryProvider(environment, undefined, (event) => {
+      logger.warn(
+        {
+          platform: event.platform,
+          arch: event.arch,
+          environment_variable: "REA_JAVASCRIPT_PRLIMIT_COMMAND",
+        },
+        event.message,
+      );
+    }),
   );
   cli.command(CLI_COMMANDS.recoverJavaScriptSources, {
     description:
