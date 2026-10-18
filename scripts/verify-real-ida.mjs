@@ -9,8 +9,15 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { access, readdir, writeFile } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/client";
@@ -119,8 +126,15 @@ const observe = (input) => {
     assert.notEqual(evidence.raw_result.metadata_before.input_path, target);
     workspaces.add(dirname(evidence.raw_result.metadata_before.input_path));
     for (const observation of evidence.raw_result.observations) {
-      assert.equal(typeof observation.arguments.database, "string");
-      databases.add(observation.arguments.database);
+      // Hex-Rays reads select their lease by instance id through execute_python.
+      const database =
+        config.protocol === "hexrays"
+          ? observation.arguments.instance_id
+          : observation.arguments.database;
+      if (config.protocol === "hexrays")
+        assert.equal(observation.tool, "execute_python");
+      assert.equal(typeof database, "string");
+      databases.add(database);
     }
   }
   report.observations.push(evidence);
@@ -401,12 +415,27 @@ const cleanup = async () => {
         "existing GUI target remains open with the original input identity",
       );
     } else {
-      const inventory = await upstream.call("idb_list", {});
-      assert.ok(
-        inventory.sessions.every(
-          (session) => !databases.has(session.session_id),
-        ),
-      );
+      if (config.protocol === "hexrays") {
+        // Leases are per server process, so a fresh server proves release by
+        // listing no live database inside any REA private workspace.
+        const inventory = await upstream.call("list_databases", {});
+        const inside = (workspace, path) => {
+          const rest = relative(workspace, path);
+          return rest !== "" && !rest.startsWith("..") && !isAbsolute(rest);
+        };
+        assert.ok(
+          inventory.instances.every(({ path }) =>
+            [...workspaces].every((workspace) => !inside(workspace, path)),
+          ),
+        );
+      } else {
+        const inventory = await upstream.call("idb_list", {});
+        assert.ok(
+          inventory.sessions.every(
+            (session) => !databases.has(session.session_id),
+          ),
+        );
+      }
       for (const workspace of workspaces)
         await assert.rejects(access(workspace), { code: "ENOENT" });
       report.checks.push(
@@ -419,10 +448,15 @@ const cleanup = async () => {
 };
 try {
   const before = await digest();
+  const siblings = (await readdir(dirname(target))).sort();
   await mcp(await cli());
   await cleanup();
   assert.equal(await digest(), before);
-  report.checks.push("original binary unchanged and never executed");
+  // Engines write databases beside their input; only the private copy may get one.
+  assert.deepEqual((await readdir(dirname(target))).sort(), siblings);
+  report.checks.push(
+    "original binary unchanged, never executed, and no files written beside it",
+  );
   report.passed = true;
 } catch (cause) {
   report.failure = {
