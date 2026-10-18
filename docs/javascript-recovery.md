@@ -7,7 +7,9 @@ never executes the selected or recovered application code.
 
 ## Caller-supplied engine
 
-REA accepts Wakaru **^1.13.0** on Linux x64. The report parser is verified with
+REA accepts Wakaru **^1.13.0** on any host that can execute the configured binary;
+**Linux x64 is the only fully verified host** and other hosts are reported as
+unverified. The report parser is verified with
 Wakaru **1.14.0**. Another release in that range is accepted, the observed
 version is reported, and a limitation records that the parser was not verified
 against that release. Wakaru changes `--version`, `--json` and `provenance.json`
@@ -16,10 +18,20 @@ only by addition within a major version
 so the parser keeps unknown report fields and reported module statuses.
 
 Set `REA_WAKARU_COMMAND` to the absolute path of an executable supplied by the
-caller. The adapter uses util-linux `prlimit` (default `/usr/bin/prlimit`;
-override with an absolute `REA_JAVASCRIPT_PRLIMIT_COMMAND`). REA does not install
-either tool. Engine configuration is checked only when recovery is requested;
-other REA capabilities remain available without it.
+caller. The caller takes responsibility for that binary on every host.
+
+On Linux the adapter bounds the worker with util-linux `prlimit` (default
+`/usr/bin/prlimit`; override with an absolute `REA_JAVASCRIPT_PRLIMIT_COMMAND`).
+Hosts without util-linux, macOS included, have no such binary, so the 1 GiB
+address-space ceiling is not a hard requirement: point
+`REA_JAVASCRIPT_PRLIMIT_COMMAND` at a wrapper that accepts the same flags (for
+example `--as= --fsize= --core= --cpu= -- command args...`) and maps them to the
+local `ulimit` equivalents, and the ceiling comes back. Without that variable the
+operation still runs: the first call emits one warning and every result lists the
+absent ceiling under `limitations`. REA does not install either tool. The
+120-second deadline and the input/output byte and entry ceilings are enforced
+in-process on every host. Engine configuration is checked only when recovery is
+requested; other REA capabilities remain available without it.
 
 Unmodified upstream source is retained in `third_party/wakaru`, pinned to
 `8219bf5016a063d7fb215101a8c45d5959ec733f` (v1.14.0, Apache-2.0).

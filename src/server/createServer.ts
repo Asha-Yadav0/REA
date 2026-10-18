@@ -193,6 +193,15 @@ const installSessionToolAvailability = (
 ) => {
   if (session === undefined) return undefined;
   const linux = process.platform === "linux";
+  /**
+   * Wakaru only needs a caller-supplied binary. Linux uses util-linux prlimit by
+   * default; elsewhere a missing limiter degrades the operation to "no
+   * address-space ceiling" with a one-time warning instead of making it
+   * unreachable, so availability must not depend on that variable.
+   */
+  const javascriptRecoveryConfigured = (
+    env: Readonly<NodeJS.ProcessEnv>,
+  ): boolean => isAbsolute(env.REA_WAKARU_COMMAND ?? "");
   const linuxX64 = linux && process.arch === "x64";
   const pwntools =
     linuxX64 && isAbsolute(environment.REA_PWNTOOLS_PYTHON ?? "");
@@ -223,7 +232,7 @@ const installSessionToolAvailability = (
       browserObservationEnabled: options.browserObservation !== undefined,
       javascriptRecoveryEnabled:
         options.javascriptRecovery !== undefined ||
-        (linuxX64 && isAbsolute(environment.REA_WAKARU_COMMAND ?? "")),
+        javascriptRecoveryConfigured(environment),
       browserScenarioEnabled: options.browserScenarioCapture !== undefined,
       electronObservationEnabled: options.electronObservation !== undefined,
       electronAutomationEnabled:
@@ -315,8 +324,21 @@ export const createServer = (
   const electronFuses = options.electronFuses ?? createElectronFuseService();
   const webNetworkCapture =
     options.webNetworkCapture ?? createWebNetworkCaptureService(environment);
+  const logger = options.logger ?? silentLogger;
   const javascriptRecovery =
-    options.javascriptRecovery ?? createJavaScriptRecoveryProvider(environment);
+    options.javascriptRecovery ??
+    createJavaScriptRecoveryProvider(environment, undefined, (event) => {
+      logger
+        .child({ layer: "javascript-recovery" })
+        .warn(
+          {
+            platform: event.platform,
+            arch: event.arch,
+            environment_variable: "REA_JAVASCRIPT_PRLIMIT_COMMAND",
+          },
+          event.message,
+        );
+    });
   const artifactResources = new ArtifactResourceScope();
   const reverseEngineering =
     createReverseEngineeringService(providerEnvironment);
@@ -336,7 +358,6 @@ export const createServer = (
     javascriptRecovery,
   };
   const startedAt = new Date().toISOString();
-  const logger = options.logger ?? silentLogger;
   const server = createMcpServer(
     session,
     delivery,
