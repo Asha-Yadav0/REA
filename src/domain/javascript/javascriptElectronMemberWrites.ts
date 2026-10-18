@@ -1,6 +1,7 @@
 import * as t from "@babel/types";
 
 import {
+  readExactJavaScriptLiteral,
   semanticStaticPropertyKey,
   semanticWriteSiteTarget,
   semanticWriteTargets,
@@ -47,11 +48,41 @@ export interface JavaScriptIntrinsicInvocation {
   readonly kind: "known" | "opaque";
   /** The original bound receiver; rebinding cannot replace it. */
   readonly receiver?: t.Node;
+  /** Callable selections consumed while recovering a bound invocation. */
+  readonly callableReads?: readonly t.Node[];
   readonly path: readonly string[];
   readonly arguments:
     | readonly t.CallExpression["arguments"][number][]
     | undefined;
 }
+
+/** Parsed recipient evidence can be refined when binding facts are complete. */
+export interface JavaScriptIntrinsicMutationRecipient {
+  readonly invocation: JavaScriptIntrinsicInvocation;
+  readonly target: t.Node | undefined;
+}
+
+/** Select possible property-write recipients, preserving unknown receiver aliases. */
+export const semanticIntrinsicMutationTargets = (
+  invocation: JavaScriptIntrinsicInvocation,
+  freshObject: (node: t.Node) => boolean,
+): readonly (t.Node | undefined)[] => {
+  const args = invocation.arguments;
+  if (
+    invocation.path.join(".") !== "intrinsic.Reflect.set" ||
+    args === undefined ||
+    (args.length < 4 && !args.some(t.isSpreadElement))
+  )
+    return [args?.[0]];
+  if (args.some(t.isSpreadElement)) return [args[0], undefined];
+  const receiver = args[3];
+  // A fresh object receives its own data slot. An unknown receiver may still
+  // be the target itself, so retain that possible alias as well.
+  return receiver !== undefined &&
+    (freshObject(receiver) || readExactJavaScriptLiteral(receiver).found)
+    ? [receiver]
+    : [args[0], receiver];
+};
 
 /**
  * Index writes through possible lexical object identities. Resolve the complete
@@ -70,7 +101,11 @@ export function* collectJavaScriptIdentityWritesSteps(
   ) => JavaScriptIntrinsicInvocation | undefined,
   staticString: (node: t.Node | undefined) => string | undefined,
   freshObject: (node: t.Node) => boolean,
-  retain: (node: t.Node, path: readonly (string | null)[]) => void,
+  retain: (
+    node: t.Node,
+    path: readonly (string | null)[],
+    recipient?: JavaScriptIntrinsicMutationRecipient,
+  ) => void,
   observeInvocation?: (
     node:
       | t.CallExpression
@@ -121,26 +156,17 @@ export function* collectJavaScriptIdentityWritesSteps(
           (owner === "Object" && objectMutators.has(method ?? "")) ||
           (owner === "Reflect" && reflectMutators.has(method ?? ""))
         ) {
-          // Reflect.set can write through its explicit receiver as well as
-          // dispatching through its target. Both identities need examination.
-          const targets =
-            owner === "Reflect" &&
-            method === "set" &&
-            arguments_ !== undefined &&
-            (arguments_.length >= 4 || arguments_.some(t.isSpreadElement))
-              ? [
-                  arguments_[0],
-                  arguments_.some(t.isSpreadElement)
-                    ? undefined
-                    : arguments_[3],
-                ]
-              : [arguments_?.[0]];
+          const targets = semanticIntrinsicMutationTargets(
+            invocation!,
+            freshObject,
+          );
           for (const target of targets) {
+            const recipient = { invocation: invocation!, target };
             // A known mutator with an opaque argument list can overwrite any
             // captured intrinsic. Do not turn an unexamined target into proof.
             if (target === undefined || t.isSpreadElement(target)) {
               for (const scope of origin(node, "opaque-call", node))
-                retain(node, scope);
+                retain(node, scope, recipient);
             }
             if (t.isNode(target) && !t.isSpreadElement(target)) {
               const identities = origin(target, "member", node);
@@ -151,10 +177,10 @@ export function* collectJavaScriptIdentityWritesSteps(
                     // Retain an unknown child key, rather than its own identity.
                     [null];
                 for (const identity of identities)
-                  retain(node, [...identity, ...key]);
+                  retain(node, [...identity, ...key], recipient);
               } else if (!freshObject(target)) {
                 for (const scope of origin(node, "opaque-call", node))
-                  retain(node, scope);
+                  retain(node, scope, recipient);
               }
             }
           }

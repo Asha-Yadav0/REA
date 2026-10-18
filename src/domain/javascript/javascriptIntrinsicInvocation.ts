@@ -78,6 +78,7 @@ export const resolveJavaScriptIntrinsicInvocation = (
   let arguments_: JavaScriptIntrinsicInvocation["arguments"] =
     expandJavaScriptInvocationArguments(node.arguments);
   let receiver: t.Node | undefined;
+  const callableReads: t.Node[] = [];
   let explicitReceiver = false;
   for (;;) {
     callee = unwrapJavaScriptExpression(callee).node;
@@ -121,6 +122,7 @@ export const resolveJavaScriptIntrinsicInvocation = (
       const bound = boundIntrinsic(callee);
       if (bound === undefined) return undefined;
       if (bound.kind === "opaque") return bound;
+      callableReads.push(...(bound.callableReads ?? []));
       path = bound.path;
       receiver = bound.receiver;
       explicitReceiver = true;
@@ -159,6 +161,7 @@ export const resolveJavaScriptIntrinsicInvocation = (
       kind: "known",
       path,
       arguments: arguments_,
+      ...(callableReads.length === 0 ? {} : { callableReads }),
       ...(receiver === undefined ? {} : { receiver }),
     };
   }
