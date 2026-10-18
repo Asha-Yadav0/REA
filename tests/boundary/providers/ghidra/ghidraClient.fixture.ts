@@ -34,6 +34,11 @@ type FixtureMode =
   | "silent"
   | "exit"
   | "old_oom_then_malformed"
+  | "oom_exit_tools"
+  | "flood_then_oom_exit_tools"
+  | "flood_then_exit_tools"
+  | "flood_then_malformed"
+  | "flood_silent"
   | "diagnostic_output";
 
 export class GhidraFixtureLauncher implements GhidraLauncher {

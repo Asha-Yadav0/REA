@@ -3551,6 +3551,45 @@ describe("Ghidra OOME error projection", () => {
   });
 });
 
+describe("Ghidra OOME beyond the retention budget", () => {
+  it("projects an observed OOME line that the retained text omits", async () => {
+    const projected = await projectFailure("process", {
+      stdout: output(""),
+      stderr: output(""),
+      failure_output: {
+        ...failureOutput("", ""),
+        complete: false,
+        observed_oome: [
+          {
+            stream: "stderr",
+            offset: 9_000_000,
+            line: "ERROR Abort due to Headless analyzer error: Java heap space (HeadlessAnalyzer) java.lang.OutOfMemoryError: Java heap space",
+          },
+        ],
+      },
+      configured_jvm_max_heap: "4G",
+    });
+    expect(projected).toMatchObject({
+      code: "resource_constraint",
+      details: {
+        resource: "memory",
+        reported_limits: { configured_jvm_max_heap: "4G" },
+      },
+    });
+    expect(projected.message).toContain("Java heap space");
+  });
+
+  it("keeps the original failure when incomplete output shows no OOME", async () => {
+    const projected = await projectFailure("process", {
+      stdout: output(""),
+      stderr: output(""),
+      failure_output: { ...failureOutput("", ""), complete: false },
+      configured_jvm_max_heap: "4G",
+    });
+    expect(projected.code).toBe("execution_failure");
+  });
+});
+
 it("reuses readiness only inside its active task and provider lifetime", async () => {
   let probes = 0;
   let version = "21.0.11";

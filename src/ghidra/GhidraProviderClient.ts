@@ -983,7 +983,10 @@ const projectPrimarySessionError = (
   return new ProviderAdapterError("ghidra", operation, context);
 };
 
-/** Project only OOME evidence captured during the operation that failed. */
+/**
+ * Project OOME evidence captured during the operation that failed, including
+ * OOME lines the process supervisor observed beyond the retention budget.
+ */
 const projectObservedJvmMemoryFailure = (
   operation: AnalysisOperation,
   failure: GhidraSessionError,
@@ -1017,7 +1020,21 @@ const projectObservedJvmMemoryFailure = (
     typeof value.text === "string"
       ? value.text
       : "";
-  const output = `${streamText(scoped.stdout)}\n${streamText(scoped.stderr)}`;
+  const observedLines = Array.isArray(scoped.observed_oome)
+    ? scoped.observed_oome.map((observed) =>
+        typeof observed === "object" &&
+        observed !== null &&
+        !Array.isArray(observed) &&
+        typeof observed.line === "string"
+          ? observed.line
+          : "",
+      )
+    : [];
+  const output = [
+    streamText(scoped.stdout),
+    streamText(scoped.stderr),
+    ...observedLines,
+  ].join("\n");
   if (!/java\.lang\.OutOfMemoryError(?:\s*:|\b)/u.test(output))
     return undefined;
   const threadCapacity = /unable to create native thread/iu.test(output);

@@ -4,6 +4,11 @@ import type { Readable, Writable } from "node:stream";
 
 import { WindowsOwnedProcess } from "../windows/WindowsOwnedProcess.js";
 
+import {
+  ProcessOutputMarkerScanner,
+  type ProviderProcessOutputMarker,
+} from "./ProcessOutputMarkerScanner.js";
+
 import type {
   OwnedProcessGroup,
   ProcessOwnershipBaseline,
@@ -138,6 +143,13 @@ export interface ProviderProcessOutputCheckpoint {
 export interface ProviderProcessOutputSince {
   readonly snapshot: ProviderProcessSnapshot;
   readonly complete: boolean;
+  /**
+   * Latest configured output marker per stream produced after the checkpoint,
+   * observed from every drained byte regardless of the retention budget.
+   */
+  readonly markers?: readonly (ProviderProcessOutputMarker & {
+    readonly stream: "stdout" | "stderr";
+  })[];
 }
 
 const outputCheckpoints = new WeakMap<
@@ -177,6 +189,11 @@ export interface ProviderProcessSupervisorOptions {
   readonly captureStdout?: boolean;
   /** Aggregate retained stdout/stderr byte budget; overflow is drained and reported, not retained. */
   readonly maxDiagnosticBytes?: number;
+  /**
+   * Single-line literal located in every drained chunk before retention
+   * applies, so its latest occurrence survives an exhausted budget.
+   */
+  readonly outputMarker?: string;
   readonly onDiagnostic?: (event: ProviderProcessDiagnostic) => void;
 }
 
@@ -309,6 +326,8 @@ export class ProviderProcessSupervisor {
   #stdoutObservedBytes = 0;
   #stderrObservedBytes = 0;
   #diagnosticTruncated = false;
+  #stdoutMarker: ProcessOutputMarkerScanner | undefined;
+  #stderrMarker: ProcessOutputMarkerScanner | undefined;
   readonly #onStdout = (chunk: Buffer | string): void => {
     this.#capture("stdout", this.#stdout, chunk);
   };
@@ -354,6 +373,7 @@ export class ProviderProcessSupervisor {
   ) {
     this.#options = options;
     this.#maxDiagnosticBytes = options.maxDiagnosticBytes;
+    this.#resetMarkers();
     if (options.captureStdout !== false)
       this.#attach(launch.process.stdout, "stdout");
     this.#attach(launch.process.stderr, "stderr");
@@ -462,7 +482,39 @@ export class ProviderProcessSupervisor {
         ...(incomplete ? { outputIncomplete: true } : {}),
       },
       complete: !incomplete && !this.#diagnosticTruncated,
+      ...this.#markersWithin(position),
     };
+  }
+
+  #markersWithin(position: {
+    readonly stdout: number;
+    readonly stderr: number;
+  }): Pick<ProviderProcessOutputSince, "markers"> {
+    const stdout = this.#stdoutMarker?.latestWithin(
+      position.stdout,
+      this.#stdoutObservedBytes,
+    );
+    const stderr = this.#stderrMarker?.latestWithin(
+      position.stderr,
+      this.#stderrObservedBytes,
+    );
+    const markers = [
+      ...(stdout === undefined
+        ? []
+        : [{ stream: "stdout" as const, ...stdout }]),
+      ...(stderr === undefined
+        ? []
+        : [{ stream: "stderr" as const, ...stderr }]),
+    ];
+    return markers.length === 0 ? {} : { markers };
+  }
+
+  #resetMarkers(): void {
+    const marker = this.#options.outputMarker;
+    this.#stdoutMarker =
+      marker === undefined ? undefined : new ProcessOutputMarkerScanner(marker);
+    this.#stderrMarker =
+      marker === undefined ? undefined : new ProcessOutputMarkerScanner(marker);
   }
 
   /** Begin a new observation on a retained process without retaining earlier output. */
@@ -473,6 +525,7 @@ export class ProviderProcessSupervisor {
     this.#stdoutObservedBytes = 0;
     this.#stderrObservedBytes = 0;
     this.#diagnosticTruncated = false;
+    this.#resetMarkers();
   }
 
   /** Wait for process exit up to a caller-owned bounded interval. */
@@ -701,8 +754,13 @@ export class ProviderProcessSupervisor {
     chunk: Buffer | string,
   ): void {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    if (stream === "stdout") this.#stdoutObservedBytes += bytes.byteLength;
-    else this.#stderrObservedBytes += bytes.byteLength;
+    if (stream === "stdout") {
+      this.#stdoutMarker?.scan(bytes, this.#stdoutObservedBytes);
+      this.#stdoutObservedBytes += bytes.byteLength;
+    } else {
+      this.#stderrMarker?.scan(bytes, this.#stderrObservedBytes);
+      this.#stderrObservedBytes += bytes.byteLength;
+    }
     const remaining =
       this.#maxDiagnosticBytes === undefined
         ? bytes.byteLength
